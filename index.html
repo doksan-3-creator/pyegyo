@@ -373,7 +373,7 @@ let p=null,g,items,bats,notes,light,battery,stamina,breath,noiseM,holding,holdLo
 const CONE=.22,LIGHT_R=270;
 function reset(){
   const MI=MAPINFO,cl=([x,y])=>cell(x,y);
-  p={...cell(MI.start.x,MI.start.y),a:MI.start.a,r:9,hidden:null,prev:null,noise:0,running:false,bobPh:0,moving:false};
+  p={...cell(MI.start.x,MI.start.y),a:MI.start.a,r:9,hidden:null,prev:null,noise:0,running:false,bobPh:0,moving:false,pitch:0};
   g={...cell(MI.ghost.x,MI.ghost.y),dx:0,dy:0,cool:5,lit:false,repath:0,next:null,seen:false,state:'wander',target:null,lastKnown:null,lostT:0,searchT:0,lingerT:0,sawHide:false,jerk:0,
     immune:0,look:0,lookT:0,pauseT:0,glanced:false,stareT:0,rushT:0,freezeT:0,rushSeen:false};
   inv={salt:1,stone:2};projs=[];parts=[];
@@ -423,7 +423,7 @@ addEventListener('keydown',e=>{if(e.target&&e.target.id==='seedIn'){if(e.key==='
   if(k==='p'||k==='escape')togglePause();});
 addEventListener('keyup',e=>{const k=e.key.toLowerCase();keys[k]=false;if(k===' ')holding=false;});
 cv.addEventListener('mousemove',e=>{if(inputMode==='touch'&&!e.movementX)return;inputMode='mouse';
-  if(state==='play'&&!paused&&!reading&&p&&!p.hidden&&(locked||mdown)){p.a+=(e.movementX||0)*.0026;if(mdown)mdown.moved+=Math.abs(e.movementX||0)+Math.abs(e.movementY||0);}});
+  if(state==='play'&&!paused&&!reading&&p&&!p.hidden&&(locked||mdown)){p.a+=(e.movementX||0)*.0026;p.pitch=clamp(p.pitch-(e.movementY||0)*.0016,-.42,.42);if(mdown)mdown.moved+=Math.abs(e.movementX||0)+Math.abs(e.movementY||0);}});
 const hitC=(x,y,c)=>Math.hypot(x-c.x,y-c.y)<c.r+12;
 cv.addEventListener('mousedown',e=>{if(inputMode==='touch')return;
   if(reading){closeNote();return;}
@@ -456,7 +456,7 @@ cv.addEventListener('touchstart',e=>{e.preventDefault();inputMode='touch';
 cv.addEventListener('touchmove',e=>{e.preventDefault();
   for(const t of e.changedTouches){
     if(mv&&mv.id===t.identifier){mv.x=t.clientX;mv.y=t.clientY;const R=UI().stickR,dx=mv.x-mv.ox,dy=mv.y-mv.oy,l=Math.hypot(dx,dy);if(l>R*1.4){mv.ox=mv.x-dx/l*R*1.4;mv.oy=mv.y-dy/l*R*1.4;}}
-    if(look&&look.id===t.identifier){if(p&&!p.hidden&&!paused)p.a+=(t.clientX-look.lx)/Math.max(320,SW)*3.0;look.lx=t.clientX;}}
+    if(look&&look.id===t.identifier){if(p&&!p.hidden&&!paused){p.a+=(t.clientX-look.lx)/Math.max(320,SW)*3.0;p.pitch=clamp(p.pitch-(t.clientY-look.ly)/SH*1.1,-.42,.42);}look.lx=t.clientX;look.ly=t.clientY;}}
 },{passive:false});
 function endTouch(e){e.preventDefault();
   if(reading){if(time-readT>.4)closeNote();return;}
@@ -482,7 +482,7 @@ addEventListener('resize',resize);addEventListener('orientationchange',()=>setTi
 function doAction(){
   if(state!=='play'||paused)return;
   if(p.hidden){ // 나가기
-    const Lh=p.hidden;p.x=Lh.x+Lh.f.x*T;p.y=Lh.y+Lh.f.y*T;p.a=Math.atan2(Lh.f.y,Lh.f.x);p.hidden=null;creak();p.noise=150;breath=100;noiseM=0;holding=false;
+    const Lh=p.hidden;p.x=Lh.x+Lh.f.x*T;p.y=Lh.y+Lh.f.y*T;p.a=Math.atan2(Lh.f.y,Lh.f.x);p.pitch=0;p.hidden=null;creak();p.noise=150;breath=100;noiseM=0;holding=false;
     if(g.state!=='hunt'&&g.state!=='rush'&&dist(g,p)<150){g.state='hunt';g.lastKnown={x:p.x,y:p.y};g.lostT=0;}
     g.lookT=0;g.pauseT=0;return;}
   const L=nearLocker();
@@ -900,7 +900,7 @@ function drawMainFP(){
   const on=lightOn(),dG=dist(g,p);
   const sh=(shakeT>0?5:0)+(g.cool<=0&&dG<120?(1-dG/120)*3:0)+(phase3?1:0);
   const bob=OPT.bob?(p.moving?Math.sin(p.bobPh)*(p.running?2.6:1.2):0)+(sh?(Math.random()-.5)*sh*.6:0):0;
-  const v=renderFP(p.x,p.y,p.a+(sh&&OPT.bob?(Math.random()-.5)*.004*sh:0),{x:0,y:0,w:SW,h:SH},{mark:on?260:80,fov:SW>SH?1.25:1.15,LR:on?300:115,amb:on?1:.42,bob,sprites:buildSprites()});
+  const v=renderFP(p.x,p.y,p.a+(sh&&OPT.bob?(Math.random()-.5)*.004*sh:0),{x:0,y:0,w:SW,h:SH},{mark:on?260:80,fov:SW>SH?1.25:1.15,LR:on?300:115,amb:on?1:.42,bob:bob+p.pitch*SH,sprites:buildSprites()});
   const m=Math.min(SW,SH),M=Math.max(SW,SH);
   if(on){const fl=battery<20?.8+Math.random()*.2:1;
     const gr=ctx.createRadialGradient(SW/2,v.hz+m*.03,m*.07,SW/2,v.hz+m*.03,M*.62);
@@ -1045,7 +1045,7 @@ function drawHUD(){
   if(p.hidden){const w=Math.min(160,SW*.36),x=20,y=SH*.72+22;
     bar(x,y,w,6,breath/100,breath>30?'#9bd':'#d55','숨');bar(x,y+16,w,6,noiseM/100,noiseM>60?'#e44':'#c96','소리');}
   if(inputMode==='touch'&&!p.hidden){drawStick(mv,u.stickR,u.stickR+34,SH-u.stickR-48,'이동 (끝까지: 달리기)');
-    if(!look){ctx.save();ctx.globalAlpha=.3;ctx.fillStyle='#fff';ctx.font='12px sans-serif';ctx.textAlign='center';ctx.fillText('⟷ 오른쪽을 드래그해 둘러보기',SW*.72,SH-28);ctx.restore();}}
+    if(!look){ctx.save();ctx.globalAlpha=.3;ctx.fillStyle='#fff';ctx.font='12px sans-serif';ctx.textAlign='center';ctx.fillText('✥ 오른쪽을 드래그해 둘러보기 (상하좌우)',SW*.72,SH-28);ctx.restore();}}
   else if(inputMode!=='touch'){ctx.save();ctx.textAlign='right';ctx.font='11px sans-serif';ctx.fillStyle='rgba(255,255,255,.3)';
     ctx.fillText((locked?'':'클릭하면 마우스로 시점 조작 · ')+'WASD 이동 · ←→ 회전 · Shift 달리기 · 클릭/F 손전등 · Q 소금 · C 돌 · E 숨기 · P 지도 · M 소리'+(muted?'(꺼짐)':''),SW-10,SH-12);ctx.restore();}
   ctx.save();ctx.textAlign='center';const fs=Math.max(14,Math.min(18,SW/24));ctx.font=`${fs}px ${SERIF}`;let y=78;
@@ -1118,7 +1118,7 @@ function drawTitle(){
   ctx.font=`${Math.min(13,SW*.034)}px sans-serif`;ctx.fillStyle='rgba(255,255,255,.4)';
   y=wrap('🎧 이어폰 권장 (소리가 방향을 알려줍니다)',SW/2,y,mw,fs*1.5);
   if(inputMode==='touch')y=wrap('왼손 엄지: 이동 (끝까지 밀면 달리기) · 오른손: 드래그로 둘러보기',SW/2,y,mw,fs*1.5);
-  else y=wrap('WASD 이동 · 마우스 시점 · 클릭/F 손전등 · E 숨기 · P 지도',SW/2,y,mw,fs*1.5);
+  else y=wrap('WASD 이동 · 마우스 시점(상하좌우) · 클릭/F 손전등 · E 숨기 · P 지도',SW/2,y,mw,fs*1.5);
   y+=fs*.4;ctx.fillStyle='rgba(200,180,140,.65)';ctx.font=`${Math.min(13,SW*.034)}px sans-serif`;y=wrap(`이번 학교: 시드 ${SEED} · 아래 칸에 시드를 넣으면 그 학교로`,SW/2,y,mw,fs*1.5);
   const best=store.get('best',null),ends=store.get('endings',[]);
   if(best!=null||ends.length){y+=fs*.6;ctx.fillStyle='rgba(200,180,140,.5)';
